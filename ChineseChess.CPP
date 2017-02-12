@@ -12,6 +12,7 @@
 #include <time.h>
 #include <windows.h>
 #include "resource.h"
+#include<stdio.h>
 
 // 版本号
 const LPCSTR cszAbout = "特别感谢！象棋小巫师";
@@ -599,7 +600,14 @@ struct PositionStruct {
       zobr.Xor(Zobrist.Table[pc - 9][sq]);
     }
   }
+ 
   int Evaluate(void) const {      // 局面评价函数
+	  /*
+	  int val = (sdPlayer == 0 ? vlWhite - vlBlack : vlBlack - vlWhite) + ADVANCED_VALUE;
+	  if (val > vvmax){
+		  vvmax = val;
+	  }
+	  return val;*/
     return (sdPlayer == 0 ? vlWhite - vlBlack : vlBlack - vlWhite) + ADVANCED_VALUE;
   }
   BOOL InCheck(void) const {      // 是否被将军
@@ -1834,6 +1842,172 @@ static void ClickSquare(int sq) {
   ReleaseDC(Xqwl.hWnd, Xqwl.hdc);
 }
 
+/***
+为了训练而写
+start
+*/
+
+
+static void RandResponseMove(void) {
+	int vlRep;
+	// 电脑走一步棋
+	SetCursor((HCURSOR)LoadImage(NULL, IDC_WAIT, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED));
+	//走棋
+	int mvs[MAX_GEN_MOVES];
+	int nGenMoveNum = pos.GenerateMoves(mvs);
+	if (nGenMoveNum == 0) {
+		return;
+	}
+	srand((unsigned)time(0));
+	int choice = rand() % nGenMoveNum;
+	int mv = mvs[choice];
+	SetCursor((HCURSOR)LoadImage(NULL, IDC_ARROW, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED));
+	pos.MakeMove(mv);
+	// 清除上一步棋的选择标记
+	DrawSquare(SRC(Xqwl.mvLast));
+	DrawSquare(DST(Xqwl.mvLast));
+	// 把电脑走的棋标记出来
+	Xqwl.mvLast = mv;
+	DrawSquare(SRC(Xqwl.mvLast), DRAW_SELECTED);
+	DrawSquare(DST(Xqwl.mvLast), DRAW_SELECTED);
+	// 检查重复局面
+	vlRep = pos.RepStatus(3);
+	if (pos.IsMate()) {
+		// 如果分出胜负，那么播放胜负的声音，并且弹出不带声音的提示框
+		PlayResWav(IDR_LOSS);
+		MessageBoxMute("请再接再厉！");
+		Xqwl.bGameOver = TRUE;
+	}
+	else if (vlRep > 0) {
+		vlRep = pos.RepValue(vlRep);
+		// 注意："vlRep"是对玩家来说的分值
+		PlayResWav(vlRep < -WIN_VALUE ? IDR_LOSS : vlRep > WIN_VALUE ? IDR_WIN : IDR_DRAW);
+		MessageBoxMute(vlRep < -WIN_VALUE ? "长打作负，请不要气馁！" :
+			vlRep > WIN_VALUE ? "电脑长打作负，祝贺你取得胜利！" : "双方不变作和，辛苦了！");
+		Xqwl.bGameOver = TRUE;
+	}
+	else if (pos.nMoveNum > 100) {
+		PlayResWav(IDR_DRAW);
+		MessageBoxMute("超过自然限着作和，辛苦了！");
+		Xqwl.bGameOver = TRUE;
+	}
+	else {
+		// 如果没有分出胜负，那么播放将军、吃子或一般走子的声音
+		PlayResWav(pos.InCheck() ? IDR_CHECK2 : pos.Captured() ? IDR_CAPTURE2 : IDR_MOVE2);
+		if (pos.Captured()) {
+			pos.SetIrrev();
+		}
+	}
+}
+int isrand = true;
+int mvCount;
+void moveRand() {
+	int pc, mv, vlRep;
+	int i, nGenMoveNum, pcCaptured;
+	int mvs[MAX_GEN_MOVES];
+	Xqwl.hdc = GetDC(Xqwl.hWnd);
+	Xqwl.hdcTmp = CreateCompatibleDC(Xqwl.hdc);
+
+
+	//走棋
+	nGenMoveNum = pos.GenerateMoves(mvs);
+
+	if (nGenMoveNum == 0) {
+		return;
+	}
+	if (isrand) {
+		srand((unsigned)time(0));
+		int choice = rand() % nGenMoveNum;
+		mv = mvs[choice];
+	}
+	else {
+		int choice = mvCount;
+		if (choice > nGenMoveNum) {
+			Xqwl.bGameOver = true;
+			MessageBoxMute("输啦!");
+			return;
+		}
+		mv = mvs[choice];
+		mvCount++;
+	}
+	
+	
+
+
+	if (pos.LegalMove(mv)) {
+		//每一次makeMove时就交换了对手
+		if (pos.MakeMove(mv)) {
+			isrand = true;
+			// 清除上一步棋的选择标记
+			DrawSquare(SRC(Xqwl.mvLast));
+			DrawSquare(DST(Xqwl.mvLast));
+			Xqwl.mvLast = mv;
+			// 把玩家走的棋标记出来
+			DrawSquare(SRC(Xqwl.mvLast), DRAW_SELECTED);
+			DrawSquare(DST(Xqwl.mvLast), DRAW_SELECTED);
+
+			Xqwl.sqSelected = 0;
+			// 检查重复局面
+			vlRep = pos.RepStatus(3);
+			if (pos.IsMate()) {
+				// 如果分出胜负，那么播放胜负的声音，并且弹出不带声音的提示框
+				PlayResWav(IDR_WIN);
+				MessageBoxMute("祝贺你取得胜利！");
+				Xqwl.bGameOver = TRUE;
+			}
+			else if (vlRep > 0) {
+				vlRep = pos.RepValue(vlRep);
+				// 注意："vlRep"是对电脑来说的分值
+				PlayResWav(vlRep > WIN_VALUE ? IDR_LOSS : vlRep < -WIN_VALUE ? IDR_WIN : IDR_DRAW);
+				MessageBoxMute(vlRep > WIN_VALUE ? "长打作负，请不要气馁！" :
+					vlRep < -WIN_VALUE ? "电脑长打作负，祝贺你取得胜利！" : "双方不变作和，辛苦了！");
+				Xqwl.bGameOver = TRUE;
+			}
+			else if (pos.nMoveNum > 100) {
+				PlayResWav(IDR_DRAW);
+				MessageBoxMute("超过自然限着作和，辛苦了！");
+				Xqwl.bGameOver = TRUE;
+			}
+			else {
+				// 如果没有分出胜负，那么播放将军、吃子或一般走子的声音
+				PlayResWav(pos.InCheck() ? IDR_CHECK : pos.Captured() ? IDR_CAPTURE : IDR_MOVE);
+				if (pos.Captured()) {
+					pos.SetIrrev();
+				}
+				//ResponseMove(); // 轮到电脑走棋
+				//Sleep(500);
+				//moveRand2();//测试双方随机走棋
+				
+				RandResponseMove();
+				
+			}
+		}
+		else {
+			//MessageBoxMute("将军!");
+			//Xqwl.bGameOver = TRUE;
+			if (isrand) {
+				mvCount = 0;
+			}
+			isrand = false;
+			
+			
+			//PlayResWav(IDR_ILLEGAL); // 播放被将军的声音
+		}
+	}
+
+	printf("交换选手\n");
+	DeleteDC(Xqwl.hdcTmp);
+	ReleaseDC(Xqwl.hWnd, Xqwl.hdc);
+	//Sleep(1000);
+}
+
+
+/***
+为了训练而写
+end
+*/
+
+
 // 初始化棋局
 static void Startup(void) {
   pos.Startup();
@@ -1916,7 +2090,14 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     x = FILE_LEFT + (LOWORD(lParam) - BOARD_EDGE) / SQUARE_SIZE;
     y = RANK_TOP + (HIWORD(lParam) - BOARD_EDGE) / SQUARE_SIZE;
     if (x >= FILE_LEFT && x <= FILE_RIGHT && y >= RANK_TOP && y <= RANK_BOTTOM) {
-      ClickSquare(COORD_XY(x, y));
+    ClickSquare(COORD_XY(x, y));
+	 //在需要测试电脑对战时取消下方注释*/
+		/*
+		while (Xqwl.bGameOver != TRUE) {
+			moveRand();
+		}
+		*/
+		//moveRand();
     }
     break;
   // 其他事件
