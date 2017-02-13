@@ -1,0 +1,3 @@
+# ChineseChessAI
+以神经网络为估值函数结合Alpha-beta剪枝的中国象棋程序，采用监督学习和进化算法进行多阶段的神经网络训练。
+特别感谢开源程序ElephantEye和象棋小巫师！
